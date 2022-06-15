@@ -318,7 +318,7 @@ function New-DigicertSmimeOrder {
     $MailAliases += $PrimaryMail
     $MailAliases = $MailAliases | Select-Object -Unique
     # Create New CSR
-    $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 12 
+    $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048
     # TODO perhaps add -Subject "CN=$DisplayName"
   
     # Order Certificate

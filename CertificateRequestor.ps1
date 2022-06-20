@@ -349,7 +349,7 @@ function New-DigicertSmimeOrder {
         Body = ($ReqData | ConvertTo-Json)
     }
     $Order = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "DigicertOrder Result: '$($Order | fl)'" -Type Debug
+    Write-Log -Message "DigicertOrder Result: '$($Order | Format-List)'" -Type Debug
     if($Order.StatusCode -ne 201){
         Write-Log -Message "DigicertOrder failed with result '$($Order.Content)'" -Type Error
         throw "Failed to create request: $($Order.Content)"
@@ -369,7 +369,7 @@ function Invoke-DigicertSmimeInstall {
         Headers = @{"X-DC-DEVKEY"="$ApiKey"}
     }
     $CerResult = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "Digicert Certificate Result: '$($CerResult | fl)'" -Type Debug
+    Write-Log -Message "Digicert Certificate Result: '$($CerResult | Format-List)'" -Type Debug
     if($CerResult.StatusCode -ne 200){
         Write-Log -Message "Get Digicert certificate failed with result '$($CerResult.Content)'" -Type Error
         throw "Failed to get certificate: $($CerResult.Content)"
@@ -396,7 +396,7 @@ function Get-DigicertSmimeOrder {
         Headers = @{"X-DC-DEVKEY"="$ApiKey"}
     }
     $OrderResult = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "DigicertOrder Result: '$($OrderResult | fl)'" -Type Debug
+    Write-Log -Message "DigicertOrder Result: '$($OrderResult | Format-List)'" -Type Debug
     if($OrderResult.StatusCode -ne 200){
         Write-Log -Message "Get DigicertOrder failed with result '$($OrderResult.Content)'" -Type Error
         throw "Failed to get order status: $($OrderResult.Content)"
@@ -448,7 +448,7 @@ function Upload-PfxToIntune {
 # Try get actual ScriptName
 try {
     $CurrentFileNameTemp = $MyInvocation.MyCommand.Name
-    If ($CurrentFileNameTemp -eq $null -or $CurrentFileNameTemp -eq "") {
+    If ($null -eq $CurrentFileNameTemp -or $CurrentFileNameTemp -eq "") {
         $CurrentFileName = "NotExecutedAsScript"
     }
     else {

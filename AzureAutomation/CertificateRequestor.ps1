@@ -51,7 +51,7 @@ $ScriptVersion = "001"
 $ScriptName = "CertificateRequestor-Digicert"
 
 
-$LogFilePathFolder = "$($env:ProgramData)\baseVISION-SMIME\"
+$LogFilePathFolder = "$($env:ProgramData)\baseVISION-SMIME\Logs"
 $FallbackScriptPath = "C:\Windows" # This is only used if the filename could not be resolved(IE running in ISE)
 
 # Log Configuration
@@ -285,7 +285,7 @@ function New-DigicertSmimeOrder {
     $MailAliases += $PrimaryMail
     $MailAliases = $MailAliases | Select-Object -Unique
     # Create New CSR
-    $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048
+    $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext
     # TODO perhaps add -Subject "CN=$DisplayName"
   
     # Order Certificate
@@ -336,7 +336,7 @@ function Invoke-DigicertSmimeInstall {
         Headers = @{"X-DC-DEVKEY"="$ApiKey"}
     }
     $CerResult = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "Digicert Certificate Result: '$($CerResult | Format-List)'" -Type Debug
+    Write-Log -Message "Digicert Certificate Result: '$($CerResult.Content)'" -Type Debug
     if($CerResult.StatusCode -ne 200){
         Write-Log -Message "Get Digicert certificate failed with result '$($CerResult.Content)'" -Type Error
         throw "Failed to get certificate: $($CerResult.Content)"
@@ -363,7 +363,7 @@ function Get-DigicertSmimeOrder {
         Headers = @{"X-DC-DEVKEY"="$ApiKey"}
     }
     $OrderResult = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "DigicertOrder Result: '$($OrderResult | Format-List)'" -Type Debug
+    Write-Log -Message "DigicertOrder Result: '$($OrderResult.Content)'" -Type Debug
     if($OrderResult.StatusCode -ne 200){
         Write-Log -Message "Get DigicertOrder failed with result '$($OrderResult.Content)'" -Type Error
         throw "Failed to get order status: $($OrderResult.Content)"
@@ -383,6 +383,7 @@ function Upload-PfxToIntune {
 
 
     $Password = Invoke-SecurePasswordGeneration
+    Write-Log -Message "Export certificate as temp pfx for upload." -Type Debug
     Export-PfxCertificate -Cert $Certificate -Password $Password -FilePath "$($env:ProgramData)\baseVISION-SMIME\temp\cert.pfx"
 
     # Using existin Intune module to create encrypted blog instead of creating a new library.
@@ -403,8 +404,9 @@ function Upload-PfxToIntune {
         Thumbprint = $UserPfx.Thumbprint
         UserPrincipalName = $UserPfx.UserPrincipalName
     }
-
+    Write-Log -Message "Start uploading cert to Intune" -Type Debug
     New-MgDeviceManagementUserPfxCertificate -BodyParameter $UserPfxBody
+    Write-Log -Message "Delete temp pfx cert" -Type Debug
     Remove-Item -Path "$($env:ProgramData)\baseVISION-SMIME\temp\cert.pfx" -Force
 }
 #endregion

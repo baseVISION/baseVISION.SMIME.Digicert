@@ -473,6 +473,12 @@ if (!(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders" ))
 
 Write-Log "Start Script $Scriptname"
 
+Write-Log "Delete all log Files in C:\temp older than 30 day(s)"
+$Daysback = "-30"
+$CurrentDate = Get-Date
+$DatetoDelete = $CurrentDate.AddDays($Daysback)
+Get-ChildItem $LogFilePathFolder | Where-Object { $_.LastWriteTime -lt $DatetoDelete } | Remove-Item -Force
+
 Write-Log "Select MS Graph beta version"
 Select-MgProfile -Name "beta"
 

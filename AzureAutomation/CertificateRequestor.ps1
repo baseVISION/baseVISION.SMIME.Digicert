@@ -8,47 +8,12 @@ The Managed Identity of the VM requires:
    - GroupMember.Read.All
    - DeviceManagementConfiguration.ReadWrite.All
 
-   $MsiObjectId = <WEB APP MSI Identity>
-    Connect-AzureAD
-    $graph = Get-AzureADServicePrincipal -Filter "AppId eq '00000003-0000-0000-c000-000000000000'"
-    $groupReadPermission = $graph.AppRoles `
-        | where Value -Like "User.Read.All" `
-        | Select-Object -First 1
+The following needs to be assigned to the Run Account of tha Azure Automation account if SharedMailbox Support should be enabled.
+- Office 365 Exchange Online
+   - Exchange.ManageAsApp
 
-    # Use the Object Id as shown in the image above
-    $msi = Get-AzureADServicePrincipal -ObjectId $MsiObjectId
-
-    New-AzureADServiceAppRoleAssignment `
-        -Id $groupReadPermission.Id `
-        -ObjectId $msi.ObjectId `
-        -PrincipalId $msi.ObjectId `
-        -ResourceId $graph.ObjectId
-    
-    $groupReadPermission = $graph.AppRoles `
-        | where Value -Like "GroupMember.Read.All" `
-        | Select-Object -First 1
-
-    # Use the Object Id as shown in the image above
-    $msi = Get-AzureADServicePrincipal -ObjectId $MsiObjectId
-
-    New-AzureADServiceAppRoleAssignment `
-        -Id $groupReadPermission.Id `
-        -ObjectId $msi.ObjectId `
-        -PrincipalId $msi.ObjectId `
-        -ResourceId $graph.ObjectId
-    
-    $groupReadPermission = $graph.AppRoles `
-        | where Value -Like "DeviceManagementConfiguration.ReadWrite.All" `
-        | Select-Object -First 1
-
-    # Use the Object Id as shown in the image above
-    $msi = Get-AzureADServicePrincipal -ObjectId $MsiObjectId
-
-    New-AzureADServiceAppRoleAssignment `
-        -Id $groupReadPermission.Id `
-        -ObjectId $msi.ObjectId `
-        -PrincipalId $msi.ObjectId `
-        -ResourceId $graph.ObjectId
+Additionally, the service principal needs to get the the "Exchange Administrator" role assigned in Azure AD to read the shared mailbox permissions.
+   
 
 Setup
  - Setup an Azure Automation Account
@@ -81,12 +46,12 @@ Param()
 ## Manual Variable Definition
 ########################################################
 
-$DebugPreference = "SilentlyContinue"
+$DebugPreference = "Continue"
 $ScriptVersion = "001"
 $ScriptName = "CertificateRequestor-Digicert"
 
 
-$LogFilePathFolder = "$($env:ProgramData)\baseVISION-SMIME\"
+$LogFilePathFolder = "$($env:ProgramData)\baseVISION-SMIME\Logs"
 $FallbackScriptPath = "C:\Windows" # This is only used if the filename could not be resolved(IE running in ISE)
 
 # Log Configuration
@@ -112,6 +77,8 @@ $ScopeGroupId = Get-AutomationVariable -Name 'AADScopeGroupId'
 
 # Azure VM with Managed Identity
 $RunningInAzureVM = $true
+$EnableSharedMailboxSupport = Get-AutomationVariable -Name 'EnableSharedMailboxSupport' 
+$TenantName = Get-AutomationVariable -Name 'TenantName' 
  
 #region Functions
 ########################################################
@@ -318,7 +285,7 @@ function New-DigicertSmimeOrder {
     $MailAliases += $PrimaryMail
     $MailAliases = $MailAliases | Select-Object -Unique
     # Create New CSR
-    $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048
+    $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext
     # TODO perhaps add -Subject "CN=$DisplayName"
   
     # Order Certificate
@@ -369,7 +336,7 @@ function Invoke-DigicertSmimeInstall {
         Headers = @{"X-DC-DEVKEY"="$ApiKey"}
     }
     $CerResult = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "Digicert Certificate Result: '$($CerResult | Format-List)'" -Type Debug
+    Write-Log -Message "Digicert Certificate Result: '$($CerResult.Content)'" -Type Debug
     if($CerResult.StatusCode -ne 200){
         Write-Log -Message "Get Digicert certificate failed with result '$($CerResult.Content)'" -Type Error
         throw "Failed to get certificate: $($CerResult.Content)"
@@ -379,7 +346,7 @@ function Invoke-DigicertSmimeInstall {
     [System.Text.Encoding]::ASCII.GetString($CerResult.Content) | Out-File -FilePath "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\$($ExecutionDate)-$($User.Id).p7b"
     $cert = Import-Certificate -FilePath "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\$($ExecutionDate)-$($User.Id).p7b" -CertStoreLocation cert:\LocalMachine\My
 
-    Write-Log -Message "Installed Certificate of Order Id '$OrderId' with thumbprint '$($Certificate.Thumbprint)'" -Type Info
+    Write-Log -Message "Installed Certificate of Order Id '$OrderId' with thumbprint '$($cert.Thumbprint)'" -Type Info
     Move-Item -Path "$($env:ProgramData)\baseVISION-SMIME\Orders\$($User.Id).json" -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\$($ExecutionDate)-$($User.Id).json" -Force
                 
     return $cert | Where-Object { $_.HasPrivateKey -eq $true }
@@ -396,7 +363,7 @@ function Get-DigicertSmimeOrder {
         Headers = @{"X-DC-DEVKEY"="$ApiKey"}
     }
     $OrderResult = Invoke-WebRequest @Request -UseBasicParsing
-    Write-Log -Message "DigicertOrder Result: '$($OrderResult | Format-List)'" -Type Debug
+    Write-Log -Message "DigicertOrder Result: '$($OrderResult.Content)'" -Type Debug
     if($OrderResult.StatusCode -ne 200){
         Write-Log -Message "Get DigicertOrder failed with result '$($OrderResult.Content)'" -Type Error
         throw "Failed to get order status: $($OrderResult.Content)"
@@ -416,6 +383,7 @@ function Upload-PfxToIntune {
 
 
     $Password = Invoke-SecurePasswordGeneration
+    Write-Log -Message "Export certificate as temp pfx for upload." -Type Debug
     Export-PfxCertificate -Cert $Certificate -Password $Password -FilePath "$($env:ProgramData)\baseVISION-SMIME\temp\cert.pfx"
 
     # Using existin Intune module to create encrypted blog instead of creating a new library.
@@ -436,8 +404,9 @@ function Upload-PfxToIntune {
         Thumbprint = $UserPfx.Thumbprint
         UserPrincipalName = $UserPfx.UserPrincipalName
     }
-
+    Write-Log -Message "Start uploading cert to Intune" -Type Debug
     New-MgDeviceManagementUserPfxCertificate -BodyParameter $UserPfxBody
+    Write-Log -Message "Delete temp pfx cert" -Type Debug
     Remove-Item -Path "$($env:ProgramData)\baseVISION-SMIME\temp\cert.pfx" -Force
 }
 #endregion
@@ -504,6 +473,12 @@ if (!(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders" ))
 
 Write-Log "Start Script $Scriptname"
 
+Write-Log "Delete all log Files in C:\temp older than 30 day(s)"
+$Daysback = "-30"
+$CurrentDate = Get-Date
+$DatetoDelete = $CurrentDate.AddDays($Daysback)
+Get-ChildItem $LogFilePathFolder | Where-Object { $_.LastWriteTime -lt $DatetoDelete } | Remove-Item -Force
+
 Write-Log "Select MS Graph beta version"
 Select-MgProfile -Name "beta"
 
@@ -547,6 +522,23 @@ try{
     Write-Log -Message "Failed to load 'IntunePfxImport'" -Type Error -Exception $_.Exception
     throw "Failed to load 'IntunePfxImport'"
 }
+if($EnableSharedMailboxSupport){
+    Write-log -Type Info -message "Check Module ExOnline"
+    $Module = Get-Module -Name ExchangeOnlineManagement -ListAvailable
+
+    If ($Null -eq $Module){
+        Write-log -Type Info -message "ExchangeOnlineManagement Module not installed"
+    } else {
+        Write-log -Type Info -message "ExchangeOnlineManagement Module found"
+    }
+
+    Write-log -Type Info -message "Connecting to Exchange Online ..."
+
+    $connection = Get-AutomationConnection -Name 'AzureRunAsConnection'
+    $DebugPreference = "SilentlyContinue"
+    Connect-ExchangeOnline -CertificateThumbprint $connection.CertificateThumbprint -AppId $connection.ApplicationID -ShowBanner:$false -Organization $TenantName
+    $DebugPreference = "Continue"
+}
 
 #endregion
 
@@ -571,6 +563,21 @@ catch {
     Write-Log -Message "It was not possible to get all PFX Certificates from Intune Service" -Type Error -Exception $_.Exception
 }
 
+# get all Shared Mailbox Permissions from Exo
+if($EnableSharedMailboxSupport){
+    $SharedMailBoxAccess = @()
+    foreach($Mailbox in (Get-EXOMailbox -RecipientTypeDetails SharedMailbox)){
+
+        foreach($Member in ($Mailbox | Get-EXOMailboxPermission)){
+            $SharedMailBoxAccess += @{
+                Mailbox = $Mailbox.UserPrincipalName
+                User = $Member.User
+            }
+        }
+    } 
+
+}
+
 foreach($User in $AllUsers){
     Write-Log -Message "Processing user '$($User.AdditionalProperties.userPrincipalName)'" -Type Debug
     # Check if user already has a valid certificate 
@@ -586,6 +593,12 @@ foreach($User in $AllUsers){
             if(@("rejected","revoked","canceled","expired") -contains $status ){
                 Write-Log -Message "Order $status, Create new Request" -Type Warn
                 Move-Item -Path "$($env:ProgramData)\baseVISION-SMIME\Orders\$($User.Id).json" -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\$status\$(Get-Date -Format "yyyyMMddHHmm")-$($User.Id).json" -Force
+                $ProxyAddresses = $User.AdditionalProperties.proxyAddresses
+                
+                if($EnableSharedMailboxSupport){
+                    $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
+                }
+                $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
                 New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $User.AdditionalProperties.proxyAddresses -DisplayName $User.AdditionalProperties.displayName
             } elseif($status -eq "issued"){
                 Write-Log -Message "Order processed and issued. Importing signed cert." -Type Info
@@ -598,6 +611,10 @@ foreach($User in $AllUsers){
             # Digicert Request
             Write-Log -Message "No Pending Order, start creating CSR" -Type Info
             $ProxyAddresses = $User.AdditionalProperties.proxyAddresses
+            
+            if($EnableSharedMailboxSupport){
+                $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
+            }
             $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
             New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
         }

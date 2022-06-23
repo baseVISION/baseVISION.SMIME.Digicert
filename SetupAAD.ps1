@@ -14,7 +14,7 @@ $graph = Get-AzureADServicePrincipal -Filter "AppId eq '00000003-0000-0000-c000-
 $msi = Get-AzureADServicePrincipal -ObjectId $MsiObjectId
 
 $groupReadPermission = $graph.AppRoles `
-    | where Value -Like "User.Read.All" `
+    | Where-Object Value -Like "User.Read.All" `
     | Select-Object -First 1
 
 New-AzureADServiceAppRoleAssignment `
@@ -26,7 +26,7 @@ New-AzureADServiceAppRoleAssignment `
 
 
 $groupReadPermission = $graph.AppRoles `
-    | where Value -Like "GroupMember.Read.All" `
+    | Where-Object Value -Like "GroupMember.Read.All" `
     | Select-Object -First 1
 
 New-AzureADServiceAppRoleAssignment `
@@ -38,7 +38,7 @@ New-AzureADServiceAppRoleAssignment `
 
 
 $groupReadPermission = $graph.AppRoles `
-    | where Value -Like "DeviceManagementConfiguration.ReadWrite.All" `
+    | Where-Object Value -Like "DeviceManagementConfiguration.ReadWrite.All" `
     | Select-Object -First 1
 
 New-AzureADServiceAppRoleAssignment `

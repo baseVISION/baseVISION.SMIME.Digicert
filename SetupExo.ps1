@@ -24,11 +24,11 @@ if($null -ne $RunAsObjectId){
 
 
     $roleName="Global Reader"
-    $role = Get-AzureADDirectoryRole | Where {$_.displayName -eq $roleName}
-    if ($role -eq $null) {
-        $roleTemplate = Get-AzureADDirectoryRoleTemplate | Where {$_.displayName -eq $roleName}
+    $role = Get-AzureADDirectoryRole | Where-Object {$_.displayName -eq $roleName}
+    if ($null -eq $role) {
+        $roleTemplate = Get-AzureADDirectoryRoleTemplate | Where-Object {$_.displayName -eq $roleName}
         Enable-AzureADDirectoryRole -RoleTemplateId $roleTemplate.ObjectId
-        $role = Get-AzureADDirectoryRole | Where {$_.displayName -eq $roleName}
+        $role = Get-AzureADDirectoryRole | Where-Object {$_.displayName -eq $roleName}
     }
     Add-AzureADDirectoryRoleMember -ObjectId $role.ObjectId -RefObjectId $RunAsObjectId
 }

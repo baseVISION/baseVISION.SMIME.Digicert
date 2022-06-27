@@ -45,18 +45,18 @@ Then you need to connect to the VM via RDP and install the Intune Certificate Co
 
 1. Enable System Managed Identity on the Azure Virtual Machine  
     ![](media/60dab5a55a021710d0763b2150b56ba3.png)
-2. Grant the permissions via Script by executing the SetupAAD.ps1 script from the script repo. Specify the Object ID retrieved from the previous screen on the first line of the script.  
+2. Grant the permissions via Script by executing the [SetupAAD.ps1](./SetupScripts/SetupAAD.ps1) script from the script repo. Specify the Object ID retrieved from the previous screen on the first line of the script.  
     ![](media/bb3dfa9d7548534fc8c86e9a747500c7.png)
 
 ### Install PowerShell Modules
 
 To execute the solution various PowerShell Modules should be preinstalled on the host and a Private/Public-Key needs to be created.
 
-1. Copy the Setup.ps1 and the IntunePfxImport folder to the VM
+1. Copy the [Setup.ps1](./SetupScripts/Setup.ps1) and the [IntunePfxImport](./SetupScripts/IntunePfxImport/) folder to the VM
 2. Execute the setup.ps1  
     It will install all required modules and generate an encryption key which will then be used by the Intune Connector and the script.
 
-Note: The IntunePfxImport Module is a ready to use build based on the Microsoft solution. Microsoft has not published this module to the PowerShellGallery and requires everybody to build with visual studio. To simplify this was done once for baseVISION. More Information in section “(Optional) Build IntunePfxImport Module” in the Appendix.
+Note: The IntunePfxImport Module is a ready to use build based on the Microsoft solution. Microsoft has not published this module to the PowerShellGallery and requires everybody to build with visual studio. To simplify this was done once for baseVISION. More Information in section “[(Optional) Build IntunePfxImport Module](https://github.com/baseVISION/baseVISION.SMIME.Digicert#optional-build-intunepfximport-module)” in the Appendix.
 
 ## Setup Azure Automation Account
 
@@ -102,7 +102,7 @@ Now we have to provision the VM as a hybrid worker in our Azure Automation Accou
 4. You can simply select the created VM. If you like to use an on-premises VM you have to follow the instructions, then follow Microsoft docs on how to setup them.
     ![](media/f81f2d7365b7bbc7a5c96adabb5b7204.png)
 5. When the correct VM is selected choose “Review + Create” and start the creation when everything looks ok.
-    ![Graphical user interface Description automatically generated](media/0b5b5fed8902c6b2eeaba5144fdf5c14.png)
+    ![](media/0b5b5fed8902c6b2eeaba5144fdf5c14.png)
 
 ### Setup Runbook CertificateRequestor
 
@@ -111,8 +111,8 @@ Now we have to create the Runbook.
 1. Start by selecting “Runbooks” within the console and click on “Create a runbook” to start the process.
 2. Provide a name and select PowerShell as Runbook type and select 5.1 as runtime version.  
     ![](media/a3dedc8dc7351cb6a8d2b70e81c00ade.png)
-3. Copy the script from the repo to the content pane and then publish it.
-    ![Graphical user interface, text Description automatically generated](media/25b8e4704e04e800475adfea877ec0fa.png)
+3. Copy the [script](./AzureAutomation/CertificateRequestor.ps1) from the repo to the content pane and then publish it.
+    ![](media/25b8e4704e04e800475adfea877ec0fa.png)
 
 ### Enable Shared Mailbox Support (Optional)
 
@@ -128,9 +128,9 @@ Configure a Run As Account for Azure Automation as the Exchange Online PowerShel
     ![](media/06093b27de0697c291f94a87cd712d8a.png)
 4. And copy the Object id as it is required to grant the permissions.
     ![](media/4f322940f1dfd1927e5316451144be13.png)
-5. Then insert the Object Id in the “SetupExo.ps1” and execute the script with Global Admin permissions.
+5. Then insert the Object Id in the [SetupExo.ps1](./SetupScripts/SetupExo.ps1) and execute the script with Global Admin permissions.
 6. Then modify the “\$EnableSharedMailboxSupport” variable in the CertificateRequestor Runbook to \$true
-7. Create an new Runbook to import the RunAsCertificate to the Hybrid Worker as [documented by Microsoft](https://docs.microsoft.com/en-us/azure/automation/automation-hrw-run-runbooks?tabs=sa-mi#runas-script).
+7. Create an new Runbook([Script](./AzureAutomation/Export-RunAsCertificateToHybridWorker.ps1)) to import the RunAsCertificate to the Hybrid Worker as [documented by Microsoft](https://docs.microsoft.com/en-us/azure/automation/automation-hrw-run-runbooks?tabs=sa-mi#runas-script).
 
 ## Exchange Online Configuration
 

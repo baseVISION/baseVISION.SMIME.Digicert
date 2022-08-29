@@ -282,7 +282,7 @@ function New-DigicertSmimeOrder {
         [String[]]$MailAliases,
         [String]$DisplayName
     )
-    $MailAliases += $PrimaryMail
+    $MailAliases = @($PrimaryMail) + $MailAliases
     $MailAliases = $MailAliases | Select-Object -Unique
     # Create New CSR
     $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext

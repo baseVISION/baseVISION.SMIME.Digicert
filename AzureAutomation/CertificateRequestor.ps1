@@ -547,7 +547,7 @@ if($EnableSharedMailboxSupport){
 
 # get all Users in Scope
 try {
-    $allUsers = ,(Get-MgGroupMember -GroupId $ScopeGroupId -Property @("id","accountEnabled","displayName","mail","userPrincipalName","proxyAddresses"))
+    [array]$allUsers = (Get-MgGroupMember -GroupId $ScopeGroupId -Property @("id","accountEnabled","displayName","mail","userPrincipalName","proxyAddresses"))
     Write-Log -Message "Successfully sourced users" -Type Info
 }
 catch {
@@ -556,7 +556,7 @@ catch {
 
 # get all PFX Certificates from Intune Service
 try {
-    $AllUserPFXs = ,(Get-MgDeviceManagementUserPfxCertificate -All -Property @("id","expirationDateTime","userPrincipalName"))
+    [array]$AllUserPFXs = (Get-MgDeviceManagementUserPfxCertificate -All -Property @("id","expirationDateTime","userPrincipalName"))
     Write-Log -Message "Successfully sourced all PFX Certificates from Intune Service" -Type Info
 }
 catch {

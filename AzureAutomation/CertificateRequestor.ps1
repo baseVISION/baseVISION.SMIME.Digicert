@@ -287,7 +287,7 @@ function New-DigicertSmimeOrder {
     # Create New CSR
     $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext
     # TODO perhaps add -Subject "CN=$DisplayName"
-  
+    $DisplayName = Convert-Umlaut -Text $DisplayName
     # Order Certificate
     $ReqData = @{
         "certificate" = @{
@@ -408,6 +408,22 @@ function Upload-PfxToIntune {
     New-MgDeviceManagementUserPfxCertificate -BodyParameter $UserPfxBody
     Write-Log -Message "Delete temp pfx cert" -Type Debug
     Remove-Item -Path "$($env:ProgramData)\baseVISION-SMIME\temp\cert.pfx" -Force
+}
+function Convert-Umlaut
+{
+  param
+  (
+    [Parameter(Mandatory)]
+    $Text
+  )
+    
+  $output = $Text.Replace('ö','oe').Replace('ä','ae').Replace('ü','ue').Replace('ß','ss').Replace('Ö','Oe').Replace('Ü','Ue').Replace('Ä','Ae')
+  $isCapitalLetter = $Text -ceq $Text.toUpper()
+  if ($isCapitalLetter) 
+  { 
+    $output = $output.toUpper() 
+  }
+  $output
 }
 #endregion
 

@@ -74,6 +74,8 @@ Source: https://dev.digicert.com/services-api/orders/order-client-certificate/
 #>
 
 $ScopeGroupId = Get-AutomationVariable -Name 'AADScopeGroupId'
+$EnablePFXExport = Get-AutomationVariable -Name 'EnablePFXExport'
+$PFXExportPasswordMailbox = Get-AutomationVariable -Name 'PFXExportPasswordMailbox'
 
 # Azure VM with Managed Identity
 $RunningInAzureVM = $true

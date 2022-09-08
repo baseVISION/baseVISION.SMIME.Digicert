@@ -2,6 +2,7 @@ Install-Module -Name PowerShellGet -Repository PSGallery -Force
 Install-Module -Name Microsoft.Graph.DeviceManagement.Administration -Scope AllUsers
 Install-Module -Name Microsoft.Graph.Groups -Scope AllUsers
 Install-Module -Name Microsoft.Graph.Users -Scope AllUsers
+Install-Module -Name Microsoft.Graph.Users.Actions -Scope AllUsers
 Install-Module -Name PSCertificateEnrollment -Scope AllUsers
 Install-Module -Name WPNinjas.PasswordGeneration -Scope AllUsers
 Install-Module -Name ExchangeOnlineManagement -Scope AllUsers

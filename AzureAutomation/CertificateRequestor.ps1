@@ -425,6 +425,87 @@ function Convert-Umlaut
   }
   $output
 }
+
+function Send-PFXCertificate {
+    param(
+        [System.Security.Cryptography.X509Certificates.X509Certificate]$Certificate,
+        [MicrosoftGraphDirectoryObject]$User
+    )
+
+    # Create a password and export the PFX certificate
+	Add-Type -AssemblyName System.Web
+	$ExportPass = [System.Web.Security.Membership]::GeneratePassword(24,2)
+	$EncryptedExportPass = ConvertTo-SecureString -String $ExportPass -AsPlainText -Force
+    Write-Log -Message "Export certificate as temp pfx to send to employee." -Type Debug
+    Export-PfxCertificate -Cert $Certificate -Password $EncryptedExportPass -FilePath "$($env:ProgramData)\baseVISION-SMIME\temp\export-cert.pfx"
+
+    # Convert PFX to make it sendable as attachment
+    $PfxBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("$($env:ProgramData)\baseVISION-SMIME\temp\export-cert.pfx"))
+	Write-Log -Message "Certificate converted for attachment." -Type Debug
+
+    # Send the PFX to the user
+    $EmployeeEmailRecipient = @{
+		EmailAddress = @{
+			address = $User.AdditionalProperties.userPrincipalName
+		}
+	}
+    $EmployeeHtmlHeader = "<h2>Your S/MIME certificate</h2>"
+    $EmployeeHtmlBody = "<p>Please find the PFX of your S/MIME certificate attached with this mail.</p>
+                 <p>To import the PFX to your non-managed device, please contact $PFXExportPasswordMailbox so they can share the export password with you."
+    $EmployeeHtmlMsg = $EmployeeHtmlHeader + $EmployeeHtmlBody
+
+    $EmployeeMessageBody = @{
+        content = "$($EmployeeHtmlMsg)";
+        ContentType = "html"
+    }
+
+    $EmployeePfxAttachment = @{
+        "@odata.type" = "#microsoft.graph.fileAttachment";
+        name = "SMIME PFX Certificate.pfx";
+        contentBytes = $PfxBase64
+    }
+
+    $EmployeeMessage = @{
+        subject = "Your S/MIME certificate";
+        toRecipients = @($EmployeeEmailRecipient);
+        body = $EmployeeMessageBody;
+        attachments = @($EmployeePfxAttachment)
+    }
+
+	Write-Log -Message "Sending PFX to user." -Type Debug
+    Send-MgUserMail -UserId $PFXExportPasswordMailbox -Message $EmployeeMessage
+
+    # Send export password to support mailbox
+    $SupportEmailRecipient = @{
+		emailAddress = @{
+			address = $PFXExportPasswordMailbox
+		}
+	}
+    $SupportHtmlHeader = "<h2>S/MIME Certificate Export Password</h2>"
+    $SupportHtmlBody = "<p>Please find the export password for the PFX certificate of user $($User.AdditionalProperties.userPrincipalName)</p>
+                        <p>Make sure that you share the password with the user through a different communication channel.</p>
+						<p></p>
+						<p>Password: $ExportPass"
+    $SupportHtmlMsg = $SupportHtmlHeader + $SupportHtmlBody
+
+    $SupportMessageBody = @{
+        content = "$($SupportHtmlMsg)"
+        ContentType = "html"
+    }
+
+    $SupportMessage = @{
+        subject = "S/MIME Certificate Export Password";
+        toRecipients = @($SupportEmailRecipient);
+        body = $SupportMessageBody
+    }
+
+	Write-Log -Message "Sending PFX export password to Support Mailbox." -Type Debug
+    Send-MgUserMail -UserId $PFXExportPasswordMailbox -Message $SupportMessage
+
+    Write-Log -Message "Delete temp pfx cert" -Type Debug
+    Remove-Item -Path "$($env:ProgramData)\baseVISION-SMIME\temp\export-cert.pfx" -Force
+
+}
 #endregion
 
 #region Dynamic Variables and Parameters
@@ -563,8 +644,11 @@ if($EnableSharedMailboxSupport){
 
 # get all Users in Scope
 try {
-    [array]$allUsers = (Get-MgGroupMember -GroupId $ScopeGroupId -Property @("id","accountEnabled","displayName","mail","userPrincipalName","proxyAddresses"))
-    Write-Log -Message "Successfully sourced users" -Type Info
+	# First we get all members of the group, including members of encapsulated groups
+    [array]$allGroupMembers = (Get-MgGroupTransitiveMember -GroupId $ScopeGroupId -Property @("id","accountEnabled","displayName","mail","userPrincipalName","proxyAddresses","department"))
+    # And filter out all group objects with the odata type
+	[array]$allUsers = $allGroupMembers | Where-Object {$_.AdditionalProperties."@odata.type" -ne "#microsoft.graph.group" }
+	Write-Log -Message "Successfully sourced users" -Type Info
 }
 catch {
     Write-Log -Message "It was not possible to get users" -Type Error -Exception $_.Exception
@@ -620,6 +704,11 @@ foreach($User in $AllUsers){
                 Write-Log -Message "Order processed and issued. Importing signed cert." -Type Info
                 $cert = Invoke-DigicertSmimeInstall -OrderId $OrderInfo.id
                 Upload-PfxToIntune -Certificate $cert -Upn $User.AdditionalProperties.userPrincipalName
+
+                if($EnablePFXExport) {
+					Write-Log -Message "Order processed and issued. Sending PFX to employee per mail." -Type Info
+					Send-PFXCertificate -Certificate $cert -User $User
+				}
             } else {
                 Write-Log -Message "Order status $status, do nothing until issued." -Type Info
             }

@@ -84,6 +84,13 @@ In case you would like to see which mail, addresses are not validated or cancel 
 
 ![](media/144be2473ad0f13741ce24f22d2b927f.png)
 
+### PFX Export User Flow
+
+For non-MDM managed devices, it is possible to utilize the Send-PFXCertificate function to send the PFX to the user through mail.
+To activate this function, you need to set the automation account variable "EnablePFXExport" to true and configure a mailbox in "PFXExportPasswordMailbox" to define, where the export password will be sent to.
+
+When the certificate is issued, the user will receive the exported PFX certificate and the ExportPasswordMailbox will receive the corresponding password. Do NOT send this password through the mail channel but utilize a password manager or another communication channel to do so!
+
 ## Appendix
 
 ### Troublshooting – Delete Certificate from Intune to request new certificate from Digicert

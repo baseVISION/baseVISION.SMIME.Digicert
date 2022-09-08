@@ -284,6 +284,8 @@ function New-DigicertSmimeOrder {
     )
     $MailAliases = @($PrimaryMail) + $MailAliases
     $MailAliases = $MailAliases | Select-Object -Unique
+    # Edge Case where empty ProxyAddresses remain in the array
+    $MailAliases = $MailAliases | Where-Object {$_ -ne ""}
     # Create New CSR
     $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext
     # TODO perhaps add -Subject "CN=$DisplayName"
@@ -429,7 +431,7 @@ function Convert-Umlaut
 function Send-PFXCertificate {
     param(
         [System.Security.Cryptography.X509Certificates.X509Certificate]$Certificate,
-        [MicrosoftGraphDirectoryObject]$User
+        $User
     )
 
     # Create a password and export the PFX certificate
@@ -699,7 +701,7 @@ foreach($User in $AllUsers){
                     $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
                 }
                 $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
-                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $User.AdditionalProperties.proxyAddresses -DisplayName $User.AdditionalProperties.displayName
+                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
             } elseif($status -eq "issued"){
                 Write-Log -Message "Order processed and issued. Importing signed cert." -Type Info
                 $cert = Invoke-DigicertSmimeInstall -OrderId $OrderInfo.id

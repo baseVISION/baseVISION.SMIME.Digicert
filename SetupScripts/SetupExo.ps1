@@ -5,6 +5,10 @@ $RunAsObjectId = ""
 
 # Managed Identity Object of VM
 $VmMsiObjectId = ""
+
+# Managed Identity of Automation Account
+$AaMsiObjectId = ""
+
 # Mailbox that will send mails with the exported PFX
 $SendPFXMailbox
 
@@ -17,7 +21,7 @@ if($null -ne $RunAsObjectId){
     $exo = Get-AzureADServicePrincipal -Filter "AppID eq '00000002-0000-0ff1-ce00-000000000000'"
 
     # Use the Object Id as shown in the image above
-    $msi = Get-AzureADServicePrincipal -ObjectId $RunAsObjectId 
+    $msi = Get-AzureADServicePrincipal -ObjectId $AaMsiObjectId 
 
     $permission = $exo.AppRoles `
         | Where-Object { $_.Value -eq 'Exchange.ManageAsApp' } `

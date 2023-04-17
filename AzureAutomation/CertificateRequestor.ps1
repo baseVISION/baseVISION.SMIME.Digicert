@@ -595,7 +595,7 @@ if($RunningInAzureVM){
 } else {
     # Azure AD  - Empty will throw Interactive Auth
     $AADAuthBody = @{
-        Scopes = @("User.Read.All","GroupMember.Read.All","DeviceManagementConfiguration.ReadWrite.All")
+        Scopes = @("User.Read.All","GroupMember.Read.All","DeviceManagementConfiguration.ReadWrite.All, Exchange.ManageAsApp, Mail.SendAs")
     }
 }
 
@@ -634,11 +634,9 @@ if($EnableSharedMailboxSupport){
     }
 
     Write-log -Type Info -message "Connecting to Exchange Online ..."
+    $tenantDomain = "basevision.onmicrosoft.com"
+    Connect-ExchangeOnline -ManagedIdentity -Organization $tenantDomain
 
-    $connection = Get-AutomationConnection -Name 'AzureRunAsConnection'
-    $DebugPreference = "SilentlyContinue"
-    Connect-ExchangeOnline -CertificateThumbprint $connection.CertificateThumbprint -AppId $connection.ApplicationID -ShowBanner:$false -Organization $TenantName
-    $DebugPreference = "Continue"
 }
 
 #endregion
@@ -741,5 +739,7 @@ foreach($User in $AllUsers){
 #region Finishing
 ########################################################
 
-Write-log -message "End Script $scriptname" -Type Info
+Write-log -message "Disconnecting Exchange Online Session" -Type Info
+Disconnect-ExchangeOnline -Confirm:$false
 
+Write-log -message "End Script $scriptname" -Type Info

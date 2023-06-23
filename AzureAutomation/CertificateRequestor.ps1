@@ -683,7 +683,7 @@ if($EnableSharedMailboxSupport){
 foreach($User in $AllUsers){
     Write-Log -Message "Processing user '$($User.AdditionalProperties.userPrincipalName)'" -Type Debug
     # Check if user already has a valid certificate 
-    $FoundCert = $AllUserPFXs | Where-Object { $_.UserPrincipalName -eq $User.AdditionalProperties.userPrincipalName -and $_.ExpirationDateTime.Date -gt (Get-Date).AddDays(-14) }
+    $FoundCert = $AllUserPFXs | Where-Object { $_.UserPrincipalName -eq $User.AdditionalProperties.userPrincipalName -and $_.ExpirationDateTime.Date -gt (Get-Date).AddDays(14) }
 
     if($null -eq $FoundCert){
         Write-Log -Message "No valid PFX found for user '$($User.AdditionalProperties.userPrincipalName)'" -Type Info

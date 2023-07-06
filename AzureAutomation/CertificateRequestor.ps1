@@ -647,7 +647,7 @@ if($EnableSharedMailboxSupport){
 # get all Users in Scope
 try {
 	# First we get all members of the group, including members of encapsulated groups
-    [array]$allGroupMembers = (Get-MgGroupTransitiveMember -GroupId $ScopeGroupId -Property @("id","accountEnabled","displayName","mail","userPrincipalName","proxyAddresses","department"))
+    [array]$allGroupMembers = (Get-MgGroupTransitiveMember -GroupId $ScopeGroupId -Property @("id","accountEnabled","displayName","mail","userPrincipalName","proxyAddresses","department", "employeeHireDate"))
     # And filter out all group objects with the odata type
 	[array]$allUsers = $allGroupMembers | Where-Object {$_.AdditionalProperties."@odata.type" -ne "#microsoft.graph.group" }
 	Write-Log -Message "Successfully sourced users" -Type Info
@@ -701,7 +701,12 @@ foreach($User in $AllUsers){
                     $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
                 }
                 $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
-                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
+                # Only Order a Digicert Certificate 1 day before employeehiredate to prevent expired validation links
+                if ($User.AdditionalProperties.employeeHireDate.AddDays(-1) -lt (get-date)) {
+                    New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
+                } else {
+                    Write-Log -Message "User $($User.AdditionalProperties.displayName) starts on $($User.AdditionalProperties.employeeHireDate) will only create order one day before."
+                }
             } elseif($status -eq "issued"){
                 Write-Log -Message "Order processed and issued. Importing signed cert." -Type Info
                 $cert = Invoke-DigicertSmimeInstall -OrderId $OrderInfo.id
@@ -723,7 +728,12 @@ foreach($User in $AllUsers){
                 $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
             }
             $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
-            New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
+            # Only Order a Digicert Certificate 1 day before employeehiredate to prevent expired validation links
+            if ($User.AdditionalProperties.employeeHireDate.AddDays(-1) -lt (get-date)) {
+                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
+            } else {
+                Write-Log -Message "User $($User.AdditionalProperties.displayName) starts on $($User.AdditionalProperties.employeeHireDate) will only create order one day before."
+            }
         }
 
     } else {

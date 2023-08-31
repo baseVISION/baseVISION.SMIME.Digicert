@@ -146,7 +146,7 @@ function Write-Log {
             Write-Debug $output
         }
         else {
-            Write-Verbose $output -Verbose
+            Write-Output $output -Verbose
         }
     }
     
@@ -282,7 +282,8 @@ function New-DigicertSmimeOrder {
         [Guid]$UserId,
         [string]$PrimaryMail,
         [String[]]$MailAliases,
-        [String]$DisplayName
+        [String]$DisplayName,
+        [string]$OrderId
     )
     $MailAliases = @($PrimaryMail) + $MailAliases
     $MailAliases = $MailAliases | Select-Object -Unique
@@ -308,6 +309,11 @@ function New-DigicertSmimeOrder {
             "years" = 1
         }
         "payment_method" = "profile"
+    }
+
+    # If we want to renew, we need to add the property 'renewal_of_order_id' with the previous order id to the request
+    If ($null -ne $OrderId) {
+        $ReqData.Add("renewal_of_order_id", $OrderId)
     }
 
     Write-Log -Message "DigicertOrder Body: '$($ReqData | ConvertTo-Json)'" -Type Debug
@@ -569,6 +575,7 @@ if (!(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders" ))
     New-Folder "$($env:ProgramData)\baseVISION-SMIME\orders\canceled"
     New-Folder "$($env:ProgramData)\baseVISION-SMIME\orders\expired"
     New-Folder "$($env:ProgramData)\baseVISION-SMIME\orders\issued"
+    New-Folder "$($env:ProgramData)\baseVISION-SMIME\orders\renewed"
     New-Folder "$($env:ProgramData)\baseVISION-SMIME\temp"
 }
 
@@ -680,6 +687,9 @@ if($EnableSharedMailboxSupport){
 
 }
 
+# Filter out users with an EmployeeHireDate that is still more than 1 day in the future
+$AllUsers = $AllUsers | Where-Object {$null -eq $_.AdditionalProperties.employeeHireDate -or ([DateTime]$_.AdditionalProperties.employeeHireDate).AddDays(-1) -lt (get-date)}
+
 foreach($User in $AllUsers){
     Write-Log -Message "Processing user '$($User.AdditionalProperties.userPrincipalName)'" -Type Debug
     # Check if user already has a valid certificate 
@@ -701,12 +711,25 @@ foreach($User in $AllUsers){
                     $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
                 }
                 $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
-                # Only Order a Digicert Certificate 1 day before employeehiredate to prevent expired validation links
-                if ($User.AdditionalProperties.employeeHireDate.AddDays(-1) -lt (get-date)) {
-                    New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
-                } else {
-                    Write-Log -Message "User $($User.AdditionalProperties.displayName) starts on $($User.AdditionalProperties.employeeHireDate) will only create order one day before."
+
+                # Check if there is an issued certificate available, if yes we need to renew the cert
+                if(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\*$($User.Id).json"){
+                    # Get Order Id from JSON file
+                    $OrderJsonFilePath = Get-ChildItem "$($env:ProgramData)\baseVISION-SMIME\Orders\issued\" -Filter "*$($User.Id).json" | Select-Object -ExpandProperty FullName
+                    $OrderJson = Get-Content -Path $OrderJsonFilePath | ConvertFrom-Json
                 }
+                # Order a renewal or new certificate
+                if($null -ne $OrderJson) {
+                    Write-Log -Message "Previous Order found, order a renewal of existing order $($OrderJson.Id) for user $($User.AdditionalProperties.displayName)" -Type Info
+                    New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName -OrderId $OrderJson.Id
+
+                    # Move old order to renewed
+                    Move-Item -Path $OrderJsonFilePath -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\renewed\$(Get-Date -Format "yyyyMMddHHmm")-$($User.Id).json" -Force
+                } else {
+                    Write-Log -Message "No previous Order found, order new certificate for user $($User.AdditionalProperties.displayName)" -Type Info
+                    New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
+                }
+
             } elseif($status -eq "issued"){
                 Write-Log -Message "Order processed and issued. Importing signed cert." -Type Info
                 $cert = Invoke-DigicertSmimeInstall -OrderId $OrderInfo.id
@@ -728,11 +751,23 @@ foreach($User in $AllUsers){
                 $ProxyAddresses += ($SharedMailBoxAccess | Where-Object {$_.User -eq $User.AdditionalProperties.userPrincipalName}).Mailbox
             }
             $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
-            # Only Order a Digicert Certificate 1 day before employeehiredate to prevent expired validation links
-            if ($User.AdditionalProperties.employeeHireDate.AddDays(-1) -lt (get-date)) {
-                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
+
+            # Check if there is an issued certificate available, if yes we need to renew the cert
+            if(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\*$($User.Id).json"){
+                # Get Order Id from JSON file
+                $OrderJsonFilePath = Get-ChildItem "$($env:ProgramData)\baseVISION-SMIME\Orders\issued\" -Filter "*$($User.Id).json" | Select-Object -ExpandProperty FullName
+                $OrderJson = Get-Content -Path $OrderJsonFilePath | ConvertFrom-Json
+            }
+            # Order a renewal or new certificate
+            if($null -ne $OrderJson) {
+                Write-Log -Message "Previous Order found, order a renewal of existing order $($OrderJson.Id) for user $($User.AdditionalProperties.displayName)" -Type Info
+                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName -OrderId $OrderJson.Id
+
+                # Move old order to renewed
+                Move-Item -Path $OrderJsonFilePath -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\renewed\$(Get-Date -Format "yyyyMMddHHmm")-$($User.Id).json" -Force
             } else {
-                Write-Log -Message "User $($User.AdditionalProperties.displayName) starts on $($User.AdditionalProperties.employeeHireDate) will only create order one day before."
+                Write-Log -Message "No previous Order found, order new certificate for user $($User.AdditionalProperties.displayName)" -Type Info
+                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
             }
         }
 

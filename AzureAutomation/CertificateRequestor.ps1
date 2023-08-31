@@ -312,7 +312,7 @@ function New-DigicertSmimeOrder {
     }
 
     # If we want to renew, we need to add the property 'renewal_of_order_id' with the previous order id to the request
-    If ($null -ne $OrderId) {
+    If ($OrderId -ne "") {
         $ReqData.Add("renewal_of_order_id", $OrderId)
     }
 

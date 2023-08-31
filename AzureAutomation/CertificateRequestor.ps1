@@ -646,6 +646,29 @@ if($EnableSharedMailboxSupport){
 
 }
 
+# Cleanup of the issued folder in case a certificate expired
+try {
+
+    $AllIssuedJson = Get-ChildItem "$($env:ProgramData)\baseVISION-SMIME\orders\issued\" -Filter "*.json" | Select-Object -Property @("Fullname","Name")
+    foreach ($Json in $AllIssuedJson) {
+        $JsonData = Get-Content -Path $Json.FullName | ConvertFrom-Json
+        $Status = Get-DigicertSmimeOrder -OrderId $JsonData.id
+
+        if(@("rejected","revoked","canceled","expired") -contains $Status ){
+            Write-Log -Message "Found certificate order $($JsonData.id) to clean up, will move files to $($Status) folder" -Type Info
+
+            $FileFilter = $Json.Name.Replace("json", "")
+            $AllUserFiles = Get-ChildItem "$($env:ProgramData)\baseVISION-SMIME\orders\issued\" -Filter "$FileFilter*" | Select-Object -Property @("Fullname","Name")
+            foreach ($File in $AllUserFiles) {
+                Move-Item -Path $File.FullName -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\$status\$($File.Name)"
+            }
+        }
+    }
+
+} catch {
+    Write-Log -Message "Failed during cleanup of issued folder" -Type Error -Exception $_.Exception
+}
+
 #endregion
 
 #region Main Script

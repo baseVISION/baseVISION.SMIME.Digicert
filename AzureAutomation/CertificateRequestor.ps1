@@ -289,7 +289,7 @@ function New-DigicertSmimeOrder {
     # Edge Case where empty ProxyAddresses remain in the array
     $MailAliases = $MailAliases | Where-Object {$_ -ne ""}
     # Filter out any onmicrosoft.com Aliases as they cannot be approved by digicert
-    $MailAliases = $MailAliases | Where-Object {$_ -like "*basevision.ch"}
+    $MailAliases = $MailAliases | Where-Object {$_ -notlike "*onmicrosoft.com"}
     # Create New CSR
     $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext
     # TODO perhaps add -Subject "CN=$DisplayName"

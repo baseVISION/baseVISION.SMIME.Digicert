@@ -282,13 +282,14 @@ function New-DigicertSmimeOrder {
         [Guid]$UserId,
         [string]$PrimaryMail,
         [String[]]$MailAliases,
-        [String]$DisplayName,
-        [string]$OrderId
+        [String]$DisplayName
     )
     $MailAliases = @($PrimaryMail) + $MailAliases
     $MailAliases = $MailAliases | Select-Object -Unique
     # Edge Case where empty ProxyAddresses remain in the array
     $MailAliases = $MailAliases | Where-Object {$_ -ne ""}
+    # Filter out any onmicrosoft.com Aliases as they cannot be approved by digicert
+    $MailAliases = $MailAliases | Where-Object {$_ -like "*basevision.ch"}
     # Create New CSR
     $csr = New-CertificateRequest -Email $MailAliases -PrivateKeyExportable -ValidityPeriod Years -ValidityPeriodUnits 1 -KeyLength 2048 -MachineContext
     # TODO perhaps add -Subject "CN=$DisplayName"
@@ -311,11 +312,6 @@ function New-DigicertSmimeOrder {
         "payment_method" = "profile"
     }
 
-    # If we want to renew, we need to add the property 'renewal_of_order_id' with the previous order id to the request
-    If ($OrderId -ne "") {
-        $ReqData.Add("renewal_of_order_id", $OrderId)
-    }
-
     Write-Log -Message "DigicertOrder Body: '$($ReqData | ConvertTo-Json)'" -Type Debug
       
     $Request = @{
@@ -327,6 +323,7 @@ function New-DigicertSmimeOrder {
     }
     $Order = Invoke-WebRequest @Request -UseBasicParsing
     Write-Log -Message "DigicertOrder Result: '$($Order | Format-List)'" -Type Debug
+    Write-Log -Message "DigicertOrder Content: $($Order.Content)" -Type Info
     if($Order.StatusCode -ne 201){
         Write-Log -Message "DigicertOrder failed with result '$($Order.Content)'" -Type Error
         throw "Failed to create request: $($Order.Content)"
@@ -358,7 +355,7 @@ function Invoke-DigicertSmimeInstall {
 
     Write-Log -Message "Installed Certificate of Order Id '$OrderId' with thumbprint '$($cert.Thumbprint)'" -Type Info
     Move-Item -Path "$($env:ProgramData)\baseVISION-SMIME\Orders\$($User.Id).json" -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\$($ExecutionDate)-$($User.Id).json" -Force
-                
+
     return $cert | Where-Object { $_.HasPrivateKey -eq $true }
 }
 function Get-DigicertSmimeOrder {
@@ -686,6 +683,10 @@ catch {
     Write-Log -Message "It was not possible to get users" -Type Error -Exception $_.Exception
 }
 
+# Filter out users with an EmployeeHireDate that is still more than 1 day in the future
+# This prevents the validation mails from expiring on the order so there is no re-order necessary.
+$AllUsers = $AllUsers | Where-Object {$null -eq $_.AdditionalProperties.employeeHireDate -or ([DateTime]$_.AdditionalProperties.employeeHireDate).AddDays(-1) -lt (get-date)}
+
 # get all PFX Certificates from Intune Service
 try {
     [array]$AllUserPFXs = (Get-MgDeviceManagementUserPfxCertificate -All -Property @("id","expirationDateTime","userPrincipalName"))
@@ -710,9 +711,6 @@ if($EnableSharedMailboxSupport){
 
 }
 
-# Filter out users with an EmployeeHireDate that is still more than 1 day in the future
-$AllUsers = $AllUsers | Where-Object {$null -eq $_.AdditionalProperties.employeeHireDate -or ([DateTime]$_.AdditionalProperties.employeeHireDate).AddDays(-1) -lt (get-date)}
-
 foreach($User in $AllUsers){
     Write-Log -Message "Processing user '$($User.AdditionalProperties.userPrincipalName)'" -Type Debug
     # Check if user already has a valid certificate 
@@ -735,27 +733,14 @@ foreach($User in $AllUsers){
                 }
                 $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
 
-                # Check if there is an issued certificate available, if yes we need to renew the cert
-                if(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\*$($User.Id).json"){
-                    # Get Order Id from JSON file
-                    $OrderJsonFilePath = Get-ChildItem "$($env:ProgramData)\baseVISION-SMIME\Orders\issued\" -Filter "*$($User.Id).json" | Select-Object -ExpandProperty FullName
-                    $OrderJson = Get-Content -Path $OrderJsonFilePath | ConvertFrom-Json
-                }
-                # Order a renewal or new certificate
-                if($null -ne $OrderJson) {
-                    Write-Log -Message "Previous Order found, order a renewal of existing order $($OrderJson.Id) for user $($User.AdditionalProperties.displayName)" -Type Info
-                    New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName -OrderId $OrderJson.Id
-
-                    # Move old order to renewed
-                    Move-Item -Path $OrderJsonFilePath -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\renewed\$(Get-Date -Format "yyyyMMddHHmm")-$($User.Id).json" -Force
-                } else {
-                    Write-Log -Message "No previous Order found, order new certificate for user $($User.AdditionalProperties.displayName)" -Type Info
-                    New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
-                }
+                Write-Log -Message "Ordering new certificate for user $($User.AdditionalProperties.displayName)" -Type Info
+                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
 
             } elseif($status -eq "issued"){
                 Write-Log -Message "Order processed and issued. Importing signed cert." -Type Info
                 $cert = Invoke-DigicertSmimeInstall -OrderId $OrderInfo.id
+                # filter again as the function returns the array instead of the single cert containing the private key
+                $cert = $cert | Where-Object { $_.HasPrivateKey -eq $true }
                 Upload-PfxToIntune -Certificate $cert -Upn $User.AdditionalProperties.userPrincipalName
 
                 if($EnablePFXExport) {
@@ -775,23 +760,8 @@ foreach($User in $AllUsers){
             }
             $ProxyAddresses = $ProxyAddresses -replace "SMTP:",""
 
-            # Check if there is an issued certificate available, if yes we need to renew the cert
-            if(Test-Path "$($env:ProgramData)\baseVISION-SMIME\Orders\Issued\*$($User.Id).json"){
-                # Get Order Id from JSON file
-                $OrderJsonFilePath = Get-ChildItem "$($env:ProgramData)\baseVISION-SMIME\Orders\issued\" -Filter "*$($User.Id).json" | Select-Object -ExpandProperty FullName
-                $OrderJson = Get-Content -Path $OrderJsonFilePath | ConvertFrom-Json
-            }
-            # Order a renewal or new certificate
-            if($null -ne $OrderJson) {
-                Write-Log -Message "Previous Order found, order a renewal of existing order $($OrderJson.Id) for user $($User.AdditionalProperties.displayName)" -Type Info
-                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName -OrderId $OrderJson.Id
-
-                # Move old order to renewed
-                Move-Item -Path $OrderJsonFilePath -Destination "$($env:ProgramData)\baseVISION-SMIME\Orders\renewed\$(Get-Date -Format "yyyyMMddHHmm")-$($User.Id).json" -Force
-            } else {
-                Write-Log -Message "No previous Order found, order new certificate for user $($User.AdditionalProperties.displayName)" -Type Info
-                New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
-            }
+            Write-Log -Message "Ordering new certificate for user $($User.AdditionalProperties.displayName)" -Type Info
+            New-DigicertSmimeOrder -UserId $User.Id -PrimaryMail $User.AdditionalProperties.mail -MailAliases $ProxyAddresses -DisplayName $User.AdditionalProperties.displayName
         }
 
     } else {

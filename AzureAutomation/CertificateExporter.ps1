@@ -64,7 +64,7 @@ $DefaultLogWindowsEventLog = "CustomPS"
 # Azure VM with Managed Identity
 $RunningInAzureVM = $true
 $PFXExportPasswordMailbox = Get-AutomationVariable -Name 'PFXExportPasswordMailbox'
-$ConfluenceDocPage = Get-AzAutomationVariable -Name 'ConfluenceDocPage'
+$ConfluenceDocPage = Get-AutomationVariable -Name 'ConfluenceDocPage'
 
 #region Functions
 ########################################################

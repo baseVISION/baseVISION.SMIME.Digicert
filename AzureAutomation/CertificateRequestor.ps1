@@ -77,7 +77,7 @@ $ScopeGroupId = Get-AutomationVariable -Name 'AADScopeGroupId'
 $EnablePFXExport = Get-AutomationVariable -Name 'EnablePFXExport'
 $PFXExportPasswordMailbox = Get-AutomationVariable -Name 'PFXExportPasswordMailbox'
 
-$ConfluenceDocPage = Get-AzAutomationVariable -Name 'ConfluenceDocPage'
+$ConfluenceDocPage = Get-AutomationVariable -Name 'ConfluenceDocPage'
 
 # Azure VM with Managed Identity
 $RunningInAzureVM = $true

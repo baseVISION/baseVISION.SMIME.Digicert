@@ -64,6 +64,7 @@ $DefaultLogWindowsEventLog = "CustomPS"
 # Azure VM with Managed Identity
 $RunningInAzureVM = $true
 $PFXExportPasswordMailbox = Get-AutomationVariable -Name 'PFXExportPasswordMailbox'
+$ConfluenceDocPage = Get-AzAutomationVariable -Name 'ConfluenceDocPage'
 
 #region Functions
 ########################################################
@@ -220,7 +221,9 @@ function Send-PFXCertificate {
 	}
     $EmployeeHtmlHeader = "<h2>Your S/MIME certificate</h2>"
     $EmployeeHtmlBody = "<p>Please find the PFX of your S/MIME certificate attached with this mail.</p>
-                 <p>To import the PFX to your non-managed device, please contact $PFXExportPasswordMailbox so they can share the export password with you."
+                 <p>To import the PFX to your non-managed device, please contact $PFXExportPasswordMailbox so they can share the export password with you.
+                 <p></p>
+                 <p>For further instruction concerning Installation on non-MDM devices or certificate renewal, check out this <a href='$ConfluenceDocPage'>Confluence page</a></p>"
     $EmployeeHtmlMsg = $EmployeeHtmlHeader + $EmployeeHtmlBody
 
     $EmployeeMessageBody = @{

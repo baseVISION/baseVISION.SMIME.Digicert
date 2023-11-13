@@ -77,6 +77,8 @@ $ScopeGroupId = Get-AutomationVariable -Name 'AADScopeGroupId'
 $EnablePFXExport = Get-AutomationVariable -Name 'EnablePFXExport'
 $PFXExportPasswordMailbox = Get-AutomationVariable -Name 'PFXExportPasswordMailbox'
 
+$ConfluenceDocPage = Get-AzAutomationVariable -Name 'ConfluenceDocPage'
+
 # Azure VM with Managed Identity
 $RunningInAzureVM = $true
 $EnableSharedMailboxSupport = Get-AutomationVariable -Name 'EnableSharedMailboxSupport' 
@@ -492,7 +494,9 @@ function Send-PFXCertificate {
     $SupportHtmlBody = "<p>Please find the export password for the PFX certificate of user $($User.AdditionalProperties.userPrincipalName)</p>
                         <p>Make sure that you share the password with the user through a different communication channel.</p>
 						<p></p>
-						<p>Password: $ExportPass"
+						<p>Password: $ExportPass</p>
+                        <p></p>
+                        <p>For further instruction concerning Installation on non-MDM devices or certificate renewal, check out this <a href='$ConfluenceDocPage'>Confluence page</a></p>"
     $SupportHtmlMsg = $SupportHtmlHeader + $SupportHtmlBody
 
     $SupportMessageBody = @{

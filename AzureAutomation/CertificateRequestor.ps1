@@ -64,6 +64,7 @@ $baseUrl = "https://www.digicert.com/services/v2"
 $ApiKey = Get-AutomationVariable -Name 'DigiCertApiKey'
 $DigicertOrgId = Get-AutomationVariable -Name 'DigiCertOrgId'
 $CertificateProduct = Get-AutomationVariable -Name 'DigiCertProduct' 
+$CertificateProfileType = Get-AutomationVariable -Name 'DigiCertProfileType' 
 <# Choose from the following list of types
 client_premium - Premium
 client_digital_signature_plus - Digital Signature Plus
@@ -299,10 +300,21 @@ function New-DigicertSmimeOrder {
     # Order Certificate
     $ReqData = @{
         "certificate" = @{
-            "common_name" = $DisplayName
+            "profile_type" = $CertificateProfileType
+            "common_name_indicator" = "email_address"
+            "individual" = @{
+                "pseudonym" = $DisplayName
+            }
+            "usage_designation" = @{
+                "primary_usage" = "dual_use"
+            }
             "emails" = $MailAliases
             "signature_hash" = "sha256"
             "csr" = (Remove-LineCarriage -object $csr)
+        }
+        "subject" = @{
+            "include_pseudonym" = $true
+            "inlcude_email" = $true
         }
         "skip_approval" = $true
         "organization" = @{
